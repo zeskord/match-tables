@@ -1,5 +1,11 @@
 const parseXlsx = require("excel").default;
 const fs = require("fs");
+var readline = require("readline");
+
+var rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
 var filenames = []; // имена файлов excel, которые будем парсить.
 var data = [];
@@ -77,4 +83,8 @@ function compareData(data) {
       console.log(entry[0], entry[1]);
     }
   }
+
+  rl.question("Нажми Ctrl + C", function (name) {
+    console.log('Ну нажми же Ctrl + C');
+  });
 }
