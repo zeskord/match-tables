@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/zeskord/match-tables#readme",
   "dependencies": {
+    "@databases/sqlite": "^3.0.0",
     "excel": "^1.0.1"
   }
 }

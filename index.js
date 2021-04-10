@@ -1,6 +1,8 @@
 const parseXlsx = require("excel").default;
 const fs = require("fs");
 var readline = require("readline");
+const connect = require("@databases/sqlite");
+const { sql } = require("@databases/sqlite");
 
 var rl = readline.createInterface({
   input: process.stdin,
@@ -8,83 +10,104 @@ var rl = readline.createInterface({
 });
 
 var filenames = []; // имена файлов excel, которые будем парсить.
-var data = [];
 
-fs.readdir("./", function (err, items) {
-  for (var i = 0; i < items.length; i++) {
-    var filename = items[i];
-    if (filename.endsWith(".xlsx")) {
-      filenames.push(filename);
-    }
-  }
+var tableNames = ["data1", "data2"];
 
-  parseFiles(filenames);
-});
+// Подключаемся к БД.
+const db = connect();
 
-function parseFiles(filenames) {
-  filenames.forEach((element) => {
-    parseXlsx(element).then((filedata) => {
-      for (var i = 0; i < filedata.length; i++) {
-        filedata[i][1] = parseFloat(filedata[i][1]);
+async function prepare() {
+  await db.query(sql`
+    CREATE TABLE IF NOT EXISTS data1 (
+      id VARCHAR NOT NULL,
+      value REAL NOT NULL
+    );
+  `);
+  await db.query(sql`
+    CREATE TABLE IF NOT EXISTS data2 (
+      id VARCHAR NOT NULL,
+      value REAL NOT NULL
+    );
+  `);
+}
+
+const prepared = prepare();
+
+const filenamesReaded = readfilenames();
+
+async function readfilenames() {
+  fs.readdir("./", function (err, items) {
+    for (var i = 0; i < items.length; i++) {
+      var filename = items[i];
+      if (filename.endsWith(".xlsx")) {
+        filenames.push(filename);
       }
-      data.push(filedata);
-      checkParseComplete();
-    });
+    }
   });
 }
 
-function checkParseComplete() {
-  // Сравнение выполняется, когда все файлы прочитаны.
-  if (data.length === filenames.length) {
-    compareData(data);
+async function set(id, value, tablename) {
+  await prepared;
+  if (tablename === "data1") {
+    await db.query(sql`
+    INSERT INTO data1 (id, value)
+      VALUES (${id}, ${value});
+  `);
+  } else {
+    await db.query(sql`
+    INSERT INTO data2 (id, value)
+      VALUES (${id}, ${value});
+  `);
   }
 }
 
-function compareData(data) {
-  var result = new Map(); // Ассоциативный массив, куда будем складывать результат.
+async function setData(filedata, tablename) {
+  await prepared;
 
-  for (var i = 0; i < data.length; i++) {
-    var sheet = data[i];
+  for (var i = 0; i < filedata.length; i++) {
+    filedata[i][1] = parseFloat(filedata[i][1]);
+    var id = filedata[i][0];
+    var value = filedata[i][1];
+    await set(id, value, tablename);
+  }
+}
 
-    for (var j = 0; j < sheet.length; j++) {
-      // Пробуем найти элемент
-      key = sheet[j][0];
-      val = sheet[j][1];
+async function setDataFromFile(filename, tableIndex) {
+  filedata = await parseXlsx(filename);
+  for (var i = 0; i < filedata.length; i++) {
+    filedata[i][1] = parseFloat(filedata[i][1]);
+  }
+  var tablename = tableNames[tableIndex];
+  tableIndex += 1;
+  await setData(filedata, tablename);
+}
 
-      var summ = 0;
-      //   console.log(summ);
-
-      //var res = result.get(key);
-
-      if (result.has(key)) {
-        summ = result.get(key);
-      } else {
-        result.set(key, 0);
-        summ = 0;
-      }
-
-      if (i === 0) {
-        var modifier = -1;
-      } else {
-        var modifier = 1;
-      }
-
-      //summ = result.get(key)
-
-      summ = summ + val * modifier;
-      //console.log(summ);
-
-      result.set(key, summ);
-    }
+async function run() {
+  await prepared;
+  await filenamesReaded;
+  var tableIndex = 0;
+  for (const filename of filenames) {
+    await setDataFromFile(filename, tableIndex);
+    tableIndex += 1;
   }
 
-  for (let entry of result) {
-    if (entry[1] !== 0) {
-      console.log(entry[0], entry[1]);
-    }
-  }
-
+  console.log(
+    await db.query(sql`
+    SELECT id, SUM(value) as value
+    FROM
+      (
+      SELECT id, value AS value FROM data1
+      UNION ALL
+      SELECT id, -value FROM data2
+      )
+    GROUP BY id
+    HAVING SUM(value) <> 0
+    ;
+    `)
+  );
   rl.question("Нажми Ctrl + C", function (name) {
-    console.log('Ну нажми же Ctrl + C');
+    console.log("Ну нажми же Ctrl + C");
   });
 }
+
+run();
