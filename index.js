@@ -13,6 +13,10 @@ var filenames = []; // имена файлов excel, которые будем 
 
 var tableNames = ["data1", "data2"];
 
+rl.question("Нажми Ctrl + C", function (name) {
+  console.log("Ну нажми же Ctrl + C");
+});
+
 // Подключаемся к БД.
 const db = connect();
 
